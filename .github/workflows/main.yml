@@ -1,54 +1,43 @@
 name: Build and Publish Whatsweb
 on:
-  # DISPARADORES AUTOMÁTICOS
   push:
-    branches: [ "master" ]
+    branches: [ master ]
   pull_request:
-    branches: [ "master" ]
-  # DISPARADOR MANUAL
+    branches: [ master ]
   workflow_dispatch:
+  create:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 jobs:
-  build:
+  build-and-publish:
+    name: Build & Publish for ${{ matrix.ut_version }} (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+         build: [Release]
+         arch: [arm64, amd64]
+         ut_version: ['20.04', 'ut24.04-1.x']
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Build Click Package
-        run: |
-          docker run \
-            -v $(pwd)/whatsweb:/app \
-            clickable/clickable:latest \
-            --project-dir=/app
-      - name: Upload .click Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/checkout@v4
         with:
-          name: whatsweb-click-package
-          path: whatsweb/build/**/*.click
-  publish:
-    needs: build
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Download .click Artifact
-        uses: actions/download-artifact@v3
+          fetch-depth: 0
+      - name: Build .click package
+        uses: tuxecure/clickable@v1
         with:
-          name: whatsweb-click-package
-      - name: Set up Python
-        uses: actions/setup-python@v4
+          path: ./whatsweb
+          image: clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }}
+          run: clickable build --verbose
+      - name: Upload .click artifact
+        uses: actions/upload-artifact@v4
         with:
-          python-version: '3.x'
-      - name: Install openstore-cli
-        run: pip install openstore-cli
-      - name: Upload to OpenStore
+          name: "whatsweb-${{ matrix.arch }}-${{ matrix.ut_version }}"
+          path: "whatsweb/build/*/app/*.click"
+          if-no-files-found: ignore
+      - name: Publish to OpenStore
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
         env:
           OPENSTORE_API_KEY: ${{ secrets.OPENSTORE_TOKEN }}
         run: |
-          CLICK_FILE=$(find . -name "*.click")
-          echo "Uploading $CLICK_FILE to the OpenStore..."
-          openstore-cli upload $CLICK_FILE --yes
+          clickable publish --project-dir=whatsweb "* $(git log -1 --pretty=%B | head -1)"
