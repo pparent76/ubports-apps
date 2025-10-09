@@ -37,7 +37,7 @@ jobs:
           docker run \
             --rm \
             -v $(pwd)/whatsweb:/app \
-            -e BUILD_TYPE
+            -e BUILD_TYPE \
             clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
             sh -c "cd /app && clickable build --verbose ${BUILD_TYPE}"
       # 4. Sube el paquete .click como un artefacto
@@ -56,6 +56,6 @@ jobs:
           docker run \
             --rm \
             -v $(pwd)/whatsweb:/app \
-            -e OPENSTORE_API_KEY
+            -e OPENSTORE_API_KEY \
             clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
             sh -c "cd /app && clickable publish \"* $(git log -1 --pretty=%B | head -1)\""
