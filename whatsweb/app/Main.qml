@@ -76,21 +76,8 @@ MainView {
   //theme.name: "Ubuntu.Components.Themes.SuruDark"
   applicationName: "alefnode.whatsweb"
   backgroundColor : "transparent"
-  anchors {
-    fill: parent
-    bottomMargin: UbuntuApplication.inputMethod.visible ? UbuntuApplication.inputMethod.keyboardRectangle.height/(units.gridUnit / 8) : 0
-    Behavior on bottomMargin {
-        NumberAnimation {
-            duration: 175
-            easing.type: Easing.OutQuad
-        }
-    }
-  }
 
 
-  //anchorToKeyboard: true
-
-  
   property list<ContentItem> importItems
 
   PageStack {
@@ -103,18 +90,56 @@ MainView {
       id: pageMain
       anchors.fill: parent
       
+
+    Rectangle {
+        visible: !Qt.application.active
+        anchors.fill: parent
+        color: "#f0f0f0"  // gris très clair
+        Image {
+            id: screensaverBackground
+            source: "../screensaver.png"  // Mets ici ton icône
+            anchors.centerIn: parent
+
+            // 50% de la largeur de l'écran
+            width: parent.width
+            height: parent.height  // Pour rester carré
+            
+        }
+        Image {
+            id: icon
+            source: "../icon-splash.png"  // Mets ici ton icône
+            anchors.centerIn: parent
+
+            // 50% de la largeur de l'écran
+            width: parent.width * 0.5
+            height: width  // Pour rester carré
+
+            fillMode: Image.PreserveAspectFit
+        }
+    }  
+      
+      //Webview-----------------------------------------------------------------------------------------------------
       WebEngineView {
         id: webview
         audioMuted: !Qt.application.active
+        visible: Qt.application.active
+        property int keyboardSize: UbuntuApplication.inputMethod.visible ? 10+UbuntuApplication.inputMethod.keyboardRectangle.height/(units.gridUnit / 8) : 0
         anchors{ fill: parent }
         focus: true
         property var currentWebview: webview
         settings.pluginsEnabled: true
         
+        onKeyboardSizeChanged: {
+        // Échapper correctement les quotes si nécessaire
+        const jsCode = `document.querySelector('footer').style.paddingBottom = "${keyboardSize}px"`;
+        webview.runJavaScript(jsCode);
+        }
+        
         profile:  WebEngineProfile {
           id: webContext
           httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.144 Safari/537.36"
           storageName: "Storage"
+          downloadPath: "/home/phablet/.cache/alefnode.whatsweb/Download/"
           persistentStoragePath: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine"
           //----------------------------------------------------------------------
           //  Notification based on web desktop notifications (Higher priority)
@@ -122,12 +147,26 @@ MainView {
           onPresentNotification: (notification) => {
                  notifyMain(notification.title, notification.message);
           }
-        }
+          
+          onDownloadRequested: {
+                //toast.show("Téléchargement demandé : " + downloadItem.url)
+                // On choisit un chemin temporaire
+                downloadItem.accept()
+                //downloadItem.finished.connect(function() {
+                //console.log("Téléchargement terminé :", downloadItem.path)
+                //Qt.openUrlExternally("file://" + downloadItem.path)
+                //})
+          }
+        
+        }//End WebEngineProfile
+        
+  
+        
         anchors {
           fill:parent
           centerIn: parent.verticalCenter
         }
-        url: "https://web.whatsapp.com"
+       url: "https://web.whatsapp.com"
         userScripts: [
           WebEngineScript {
             injectionPoint: WebEngineScript.DocumentCreation
@@ -140,13 +179,14 @@ MainView {
           request.accepted = true;
           var importPage = mainPageStack.push(Qt.resolvedUrl("ImportPage.qml"),{"contentType": ContentType.All, "handler": ContentHandler.Source})
           importPage.imported.connect(function(fileUrl) {
-            console.log(String(fileUrl).replace("file://", ""));
+            console.log(String(fileUrl).replace("file://", ""))
             request.dialogAccept(String(fileUrl).replace("file://", ""));
-            mainPageStack.push(pageMain)
+            mainPageStack.pop(importPage)
           })
         }
         onNewViewRequested: {
             request.action = WebEngineNavigationRequest.IgnoreRequest
+            //toast.show(request.requestedUrl);
             if(request.userInitiated) {
                 Qt.openUrlExternally(request.requestedUrl)
             }
@@ -185,10 +225,82 @@ MainView {
                 //Send notification in 50ms through timer1
                 timer1.running = true;
             }
+            if (message.startsWith("[ClipBoardCopy]")) {
+                //Send notification in 50ms through timer1
+                textEdit.text = message.replace(/^\[ClipBoardCopy\]\s*/, "")
+                //textEdit.text = message
+                textEdit.selectAll()
+                textEdit.copy()
+                toast.show("Message copied to clipboard!")
+            }
+            if (message.startsWith("[ShowDebug]")) {
+                toast.show(message.replace(/^\[ShowDebug\]\s*/, ""))
+            }            
         }
         
-        
+      } //End webview--------------------------------------------------------------------------------------------
+     TextEdit{
+        id: textEdit
+        visible: false
       }
+Rectangle {
+    id: toast
+    radius: 8
+    color: "#d9fdd3"
+    z:100
+    opacity: 0
+    visible: false
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left 
+    anchors.bottomMargin: 14
+    anchors.leftMargin: 100
+   // La taille s'adapte automatiquement au texte
+    implicitWidth: toastRow.width + 24
+    implicitHeight: toastRow.height + 3
+
+    Row {
+        id: toastRow
+        anchors.centerIn: parent
+        spacing: 7 // espace entre icône et texte
+        padding: 12
+
+        Image {
+            id: toastIcon
+            source: Qt.resolvedUrl("Icons/check.png")  // ton icône ici
+            width: 20
+            height: 20
+            visible: source !== ""
+        }
+
+        Text {
+            id: toastText
+            color: "black"
+            font.pixelSize: 14
+            font.bold: true
+        }
     }
+
+    Behavior on opacity {
+        NumberAnimation { duration: 300 }
+    }
+
+    Timer {
+        id: timer
+        repeat: false
+        interval: 2000
+        onTriggered: { toast.opacity = 0; Qt.callLater(() => toast.visible = false) }
+    }
+
+    function show(msg) {
+        toastText.text = msg
+        toast.visible = true
+        toast.opacity = 1
+        timer.restart()
+        shown()
+    }
+  }
+      
+    }
+    
   }
 }
