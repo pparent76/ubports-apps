@@ -1,20 +1,103 @@
 // ==UserScript==
 // @name          WhatsApp (Responsive mode)
-// @namespace     http://blog.alefnode.com
-// @description	  Whats App is now responsive
-// @author        Adrian Campos Garrido
-// @version       20240930
+// @description	  WhatsApp web is now responsive
+// @authors       Adrian Campos Garrido, Pierre Parent
+// @version       20251009
 // @include       https://*.whatsapp.com/*
 // ==/UserScript==
 
+
+const X = {
+  //MainWrapper stuff (element class two)----------------------------------------------------
+  mainWrapper: () => document.querySelector('.two'),  
+    unkownSection1: () => document.querySelector('.two').childNodes[1],
+      unkownSection2: () => document.querySelector('.two').childNodes[1].childNodes[0],  
+    overlayMenus: () => document.querySelector('.two').childNodes[2],
+      uploadPannel: () => document.querySelector('.two').childNodes[2].childNodes[1], //(to upload photos/videos/document)    
+      leftSettingPannel: () => document.querySelector('.two').childNodes[2].childNodes[0], // leftMenus (Settings, status, community, profile, ...)
+    chatList: () => document.querySelector('.two').childNodes[3],
+    chatWindow: () => document.querySelector('.two').childNodes[4],
+  //-------------------------------------------------------------------------------------------
+
+  upperWrapper: () => document.querySelector('.three'),
+    contactInfo: () => document.querySelector('.three').childNodes[5],
+      
+  leftMenu: () => document.querySelector('header'),
+
+  
+  smileyWrapper: () => document.getElementById('expressions-panel-container'),
+  smileyPanel: () => document.querySelector('#expressions-panel-container > :first-child > :first-child'),
+  
+
+  
+  //Landing elements (Only present temporarilly while whatsapp is loading)
+  landingWrapper: () => document.querySelector('.landing-wrapper'),
+  landingHeader: () => document.querySelector('.landing-header')
+  
+};
+
+//-------------------------------------------------------------------------------------
+//                             Quick ClipBoard code
+//-------------------------------------------------------------------------------------
+
+// Ensemble pour garder la trace des div déjà sélectionnées
+var copiedMessage1;
+var copiedMessage2;
+
+document.addEventListener("touchend", () => {
+  const selection = window.getSelection();
+  const selectedText = selection.toString().trim();
+  if (selectedText.length > 0) {
+  const node = selection.anchorNode;
+  const div = node?.nodeType === 1 ? node.closest("div") : node?.parentElement?.closest("div");
+  
+ 
+    if (div && !div.isContentEditable && copiedMessage1!=div&& copiedMessage2!=div) {
+          copiedMessage1=div;
+          copiedMessage2=div;
+          const range = document.createRange();
+          range.selectNodeContents(div);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          const originalHTML = div.innerHTML;
+          div.querySelectorAll('img').forEach(img => {
+              const altText = img.getAttribute('alt') || '';
+              const textNode = document.createTextNode(altText);
+            img.replaceWith(textNode);
+          });          
+          console.log("[ClipBoardCopy]" + window.getSelection().toString());
+          div.innerHTML=originalHTML;
+          selection.removeAllRanges();
+    }
+  }
+
+  
+});
+    
+    
 // Declare variables
 updatenotificacion = 0;
 allownotification = 0;
+var lastClickContact = 0;
+var lastClickEditable = 0;
 
-
+//-----------------------------------------------------
 //Request by default webnofications permission
+//-----------------------------------------------------
 Notification.requestPermission();
 
+
+//-----------------------------------------------------
+//            Usefull functions
+//-----------------------------------------------------
+  function addCss(cssString) {
+      var head = document.getElementsByTagName('head')[0];
+      var newCss = document.createElement('style');
+      newCss.type = "text/css";
+      newCss.innerHTML = cssString;
+      head.appendChild(newCss);
+  }
+  
 // Listeners to startup APP
 window.addEventListener("load", function(event) {
     console.log("Loaded");
@@ -28,18 +111,22 @@ document.addEventListener('readystatechange', event => {
     }
 });
 
-// First resize after loading the web
+//-----------------------------------------------------
+//         First resize after loading the web 
+//    (temporary timeout only running at the begining)
+//------------------------------------------------------
 var check = 0;
 var checkExist = setInterval(function() {
+  
   if (document.getElementById('app').getElementsByClassName('browser')[0]) {
     clean();
     location.reload();
   } else {
-    if (document.getElementById('app').getElementsByClassName('landing-wrapper').length) {
-      document.getElementById('app').getElementsByClassName('landing-wrapper')[0].style.minWidth = 'auto';
-      document.getElementById('app').getElementsByClassName('landing-header')[0].style.display = 'none';
+    if (X.landingWrapper()) {
+      X.landingWrapper().style.minWidth = 'auto';
+      X.landingHeader().style.display = 'none';
     }
-    if (document.getElementById("app").getElementsByClassName('two')[0].childNodes.length) {
+    if (X.mainWrapper().childNodes.length) {
       console.log("Exists!");
       if ( check == 0 ) {
         clearInterval(checkExist);
@@ -51,206 +138,248 @@ var checkExist = setInterval(function() {
   }
 }, 1000);
 
-// Analize JS after every click on APP and execute Actions
-window.addEventListener("click", function() {
-  console.log("Click");
-  
-  //if (document.getElementById("app").getElementsByClassName('two')[0].childNodes[2].style.display == 'none') {
-  //  navigation();
-  //}
-	
-  // First if to resize when sending a file/image/video/document
-  if (document.querySelector('input[accept="image/*,video/mp4,video/3gpp,video/quicktime"]')){
-    console.log("Adjust attachment width");
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[0].style.minWidth = "";
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[0].style.flex= "0 0 0";
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[1].style.minWidth = "90%";
-  } else if (document.querySelector('input[accept="image/*,video/mp4,video/3gpp,video/quicktime"]') == null && document.getElementById("app").getElementsByClassName('two')[0] !== undefined){
-    console.log("Restore profile width");
-    // Restore Profile and Settings menu
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[0].style.minWidth = "100%";
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[0].style.flex= "0 0 45%";
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[1].style.minWidth = "";
-  } 
-
-  if (document.getElementById("app").getElementsByClassName('three')[0] !== undefined){
-    if (document.getElementById("app").getElementsByClassName('three')[0].childNodes[5] !== undefined){
-      inchatcontactandgroupinfo();
-    }
-  }
-  if (document.getElementById("app").getElementsByClassName('two')[0] !== undefined){
-    //variable para el menu "inchatcontactandgroupinfo"
-  	const inchatelements = document.getElementById("app").getElementsByClassName('two')[0].childNodes;
-    if (inchatelements.length >= 5){
-      restoreinchatcontactandgroupinfo();
-    }
-  }
-  
-  
-  if (updatenotificacion == 0 || allownotification == 0){
-    disablenotifications();
-  }
-  
-});
-
-// Define all the functions to work on it
+//----------------------------------------------------------------------
+//            Define all the functions to work on it
+//           (Called one time when main app is loaded)
+//----------------------------------------------------------------------
 function main(){
   console.log("Call main function")
-  document.getElementById("app").getElementsByClassName('two')[0].childNodes[4].style.display = 'none';
-  // document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[2].style.display = 'none';
-  document.getElementById("app").getElementsByClassName('two')[0].childNodes[2].style.width = "10%"
-  document.getElementById("app").getElementsByClassName('two')[0].childNodes[3].style.minWidth = "90%"
-  document.getElementById('app').getElementsByClassName('two')[0].style.minWidth = 'auto';
-  document.getElementById('app').getElementsByClassName('two')[0].style.minHeight = 'auto';
+  X.overlayMenus().style.width="0";
   
-  // Resize Profile and Settings menu
-  //document.getElementById("app").getElementsByClassName('two')[0].childNodes[1].childNodes[0].style.minWidth = "90%"
-
-  document.getElementById("pane-side").addEventListener('click', function(event) {
-    // Aquí encontramos el DIV más cercano al evento de clic
-    var clickedDiv = event.target.closest('div');
-
-    // Verificamos si el clic ocurrió en un DIV específico
-    if (clickedDiv) {
-      // Aquí puedes hacer algo con el div que capturaste
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[3].style.display = 'none';
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[4].style.display = '';
-      menu();
+  showchatlist();  
+  X.chatList().style.minWidth = "100%"
+  X.chatWindow().style.minWidth = "100%"  
+   X.mainWrapper().style.minWidth = 'auto';
+   X.mainWrapper().style.minHeight = 'auto';
+   
+  //Avoid opening the keyboard when entering a chat
+  document.body.addEventListener('focusin', (event) => {
+  const el = event.target;
+    if ( lastClickEditable == 0 && el.isContentEditable)
+    {
+      el.blur();
     }
   });
-  disablenotifications();
+
+  addLeftMenuButtonToChatList();
+  
+   if (X.leftMenu()) {
+     X.leftMenu().style.display = 'none';
+   }
+    
+  //Fix emoticons panel
+  if (X.smileyWrapper()) {
+    const observer = new MutationObserver((mutationsList) => {
+          X.smileyPanel().style.transformOrigin = "left bottom"; 
+          X.smileyPanel().style.transform= 'scale(0.7)';
+          X.smileyPanel().style.left= '2%'; 
+          setTimeout(() => {
+          X.smileyPanel().style.transform= 'scale(0.7)';
+          }, 300);
+          setTimeout(() => {
+          X.smileyPanel().style.transform= 'scale(0.7)';
+          }, 1000);          
+    });
+    observer.observe(X.smileyWrapper(), { childList: true, subtree: true });
+  }
+
   //Request by default webnofications permission
   Notification.requestPermission();
 }
 
-
-function navigation() {
-  var check = 0;
-  var checkExist = setInterval(function() {
-    if (document.getElementById("app").getElementsByClassName('two')[0].childNodes[3].style.display === null) {
-      console.log("Exists!");
-      if ( check == 0 ) {
-        clearInterval(checkExist);
-        menu();
+//------------------------------------------------------------
+//  Analize JS after every click on APP and execute Actions
+//------------------------------------------------------------
+window.addEventListener("click", function() {
+    console.log("Click")
+  
+  lastClickEditable=0
+  const grid = event.target.closest('[role="grid"]');
+  if (grid) {
+      if (lastClickContact==0)
+      {
+        showchatWindow();
+        setTimeout(() => {
+        addBackButtonToChatView();
+          }, 200);
       }
-      check = 1;
-    }
-  }, 200); 
-}
-
-function menu(){
-
-  console.log("Call menu function")
-  function addCss(cssString) {
-      var head = document.getElementsByTagName('head')[0];
-      var newCss = document.createElement('style');
-      newCss.type = "text/css";
-      newCss.innerHTML = cssString;
-      head.appendChild(newCss);
+      lastClickContact=1
+  }
+  else
+  {
+      lastClickContact=0
+      const el=event.target;
+      if ( el && el.isContentEditable) 
+      {
+      lastClickEditable=1;
+      }
   }
   
-  function addJS(jsString) {
-      var head = document.getElementsByTagName('head')[0];
-      var newJS = document.createElement('script');
-      newJS.innerHTML = jsString;
-      head.appendChild(newJS);
+
+  // Handle contactInfo Openned panel
+  if (X.upperWrapper() !== undefined){
+    if (X.contactInfo() !== undefined){
+      inchatcontactandgroupinfo();
+    }
+  }
+  
+  //For Quick Copy to ClipBoard system
+  if ( lastClickContact != 1 )
+  {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    if (selectedText.length == 0) {
+      if (copiedMessage1) copiedMessage1 = null;
+      else copiedMessage2 = null;
+    }
   }
 
-  check = 0;
-  if ( check == 0 ) {
-    addCss(".back_button span { display:block; height: 100%; width: 100%;}.back_button { position: absolute; left: 0; z-index:200; width:60px; height:45px; display:-webkit-flex; display:flex; -webkit-align-items:center; align-items:center; -webkit-justify-content:center; justify-content:center } html[dir] .back_button { border-radius:50%; } html[dir=ltr] .back_button { right:11px } html[dir=rtl] .back_button { left:11px } .back_button path { fill:#93999c; fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
-    
-  	addJS('window.onscroll = function() {myFunction()}; var navbar = document.getElementById("navbar"); var sticky = navbar.offsetTop; function myFunction() { if (window.pageYOffset >= sticky) { navbar.classList.add("sticky") } else { navbar.classList.remove("sticky"); } } ');
+  
+});
 
+//------------------------------------------------------------------------------------
+//          Function To display or hide left menu
+//------------------------------------------------------------------------------------
+function toggleLeftMenu(){
+  if (X.leftMenu()) {
+      if ( X.leftMenu().style.display == 'none' )
+      {
+        X.leftMenu().style.display = 'block';
+        X.unkownSection2().style.minWidth = "90%"
+        X.chatList().style.left= '';
+        X.chatList().style.position= 'static';
+
+        X.overlayMenus().style.width="100%";
+        X.overlayMenus().style.minWidth = "90%"
+        
+        
+        X.uploadPannel().style.width="";
+        X.uploadPannel().style.minWidth="";   
+        X.leftSettingPannel().style.display="";
+        X.leftSettingPannel().style.maxWidth="85%";            
+        X.leftSettingPannel().style.minWidth="85%";    
+        
+      }
+      else
+      {
+        X.chatList().style.position= 'absolute';
+        X.chatList().style.left= '0';
+        X.overlayMenus().style.minWidth = "0%"
+        X.overlayMenus().style.width="0%";
+        setTimeout(() => {
+           X.leftMenu().style.display = 'none';
+           X.unkownSection2().style.minWidth = "100%"   
+        }, 500);
+  
+      }
+  }
+}
+
+//------------------------------------------------------------------------------------
+//          Function do add a button to access left menu
+//                 inside main chat list header
+//------------------------------------------------------------------------------------
+function addLeftMenuButtonToChatList(){
+    addCss(".added_menu_button span { display:block; height: 100%; width: 100%;}.added_menu_button {  z-index:500; width:50px; height:45px; } html[dir] .added_menu_button { border-radius:50%; } html[dir=ltr] .added_menu_button { right:11px } html[dir=rtl] .added_menu_button { left:11px } .added_menu_button path { fill:#000000; fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
+
+    var newHTML         = document.createElement('div');
+    newHTML.className += "added_menu_button";
+    newHTML.style = "";
+    newHTML.addEventListener("click", toggleLeftMenu);    
+    newHTML.innerHTML   = '<a href="javascript:void(0);" ><span class="html-span" style="height:50px; width:60px;"><div class="html-div" style="padding:10px; --x-transform: none;"><div aria-expanded="false" aria-haspopup="menu" aria-label="MenuLeft" class=""><div class="html-div"><span aria-hidden="true" data-icon="more-refreshed" ><svg viewBox="0 0 24 24" height="24" width="24" preserveAspectRatio="xMidYMid meet" class="" fill="none"><title>more-refreshed</title><path d="M12 20C11.45 20 10.9792 19.8042 10.5875 19.4125C10.1958 19.0208 10 18.55 10 18C10 17.45 10.1958 16.9792 10.5875 16.5875C10.9792 16.1958 11.45 16 12 16C12.55 16 13.0208 16.1958 13.4125 16.5875C13.8042 16.9792 14 17.45 14 18C14 18.55 13.8042 19.0208 13.4125 19.4125C13.0208 19.8042 12.55 20 12 20ZM12 14C11.45 14 10.9792 13.8042 10.5875 13.4125C10.1958 13.0208 10 12.55 10 12C10 11.45 10.1958 10.9792 10.5875 10.5875C10.9792 10.1958 11.45 10 12 10C12.55 10 13.0208 10.1958 13.4125 10.5875C13.8042 10.9792 14 11.45 14 12C14 12.55 13.8042 13.0208 13.4125 13.4125C13.0208 13.8042 12.55 14 12 14ZM12 8C11.45 8 10.9792 7.80417 10.5875 7.4125C10.1958 7.02083 10 6.55 10 6C10 5.45 10.1958 4.97917 10.5875 4.5875C10.9792 4.19583 11.45 4 12 4C12.55 4 13.0208 4.19583 13.4125 4.5875C13.8042 4.97917 14 5.45 14 6C14 6.55 13.8042 7.02083 13.4125 7.4125C13.0208 7.80417 12.55 8 12 8Z" fill="currentColor"></path></svg></span></div><div class="html-div" role="none" data-visualcompletion="ignore" style="inset: 0px;"></div></div></div></span></a>';
+    
+    //Insert it, TODO improve the way it is inserted
+    document.querySelectorAll('header').forEach(header => {
+        if (  header.querySelector('[data-icon="new-chat-outline"]') && ! header.querySelector('#added_menu_button') )
+        {
+         if ( header.firstChild.firstChild )
+            header.firstChild.firstChild .style.width="calc(100% - 40px)";
+          header.prepend(newHTML); 
+        }
+    });
+}
+
+
+
+//-----------------------------------------------------------------------------
+//         Function to add a back button in chat view header
+//              To go back to main chat list view
+//----------------------------------------------------------------------------
+function addBackButtonToChatView(){
+
+    addCss(".back_button span { display:block; height: 100%; width: 100%;}.back_button {  z-index:200; width:37px; height:45px; } html[dir] .back_button { border-radius:50%; } html[dir=ltr] .back_button { right:11px } html[dir=rtl] .back_button { left:11px } .back_button path { fill:#000000; fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
+    
     var newHTML         = document.createElement('div');
     newHTML.className += "back_button";
     newHTML.style = "";
     newHTML.addEventListener("click", showchatlist);
-    newHTML.innerHTML   = "<span data-icon='left'><svg class='svg_back' id='Layer_1' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 21 21' width='21' height='21'><path fill='#263238' fill-opacity='.33' d='M4.8 6.1l5.7 5.7 5.7-5.7 1.6 1.6-7.3 7.2-7.3-7.2 1.6-1.6z'></path></svg></span>";
+    newHTML.innerHTML   = "<span data-icon='left' id='back_button' ><svg class='svg_back' id='Layer_1' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 21 21' width='21' height='21'><path fill='#000000' fill-opacity='1' d='M4.8 6.1l5.7 5.7 5.7-5.7 1.6 1.6-7.3 7.2-7.3-7.2 1.6-1.6z'></path></svg></span>";
 
-    var eElement = document.getElementById("main").childNodes[1];
-    eElement.insertBefore(newHTML, eElement.firstChild);
-    
-    check = check + 1;
-  }
-
+    //Insert it, TODO improve the way it is inserted    
+    document.querySelectorAll('header').forEach(header => {
+        if (  header.querySelector('[data-icon="search-refreshed"]') && ! header.querySelector('#back_button') )
+          header.prepend(newHTML); 
+    });
 }
 
+
+//-----------------------------------------------------------------------------
+//         Function to show main chat list view
+//----------------------------------------------------------------------------
 function showchatlist(){
-  document.getElementById("app").getElementsByClassName('two')[0].childNodes[3].style.display = 'block';
-  document.getElementById("app").getElementsByClassName('two')[0].childNodes[4].style.display = 'none'; 
+  //Make sure to unfocus any focused élément of previous view  
+  document.activeElement.blur();
+  
+  //Slide back Chatlist panel to main view  
+  X.chatList().style.transition= "left 0.30s ease-in-out";
+  X.chatList().style.position= 'absolute';
+  X.chatList().style.left= '0';
+
 }
 
-function disablenotifications(){
-  //Now we need notifications to show
-  // // Disable update available notification
-  // if (document.querySelector('span[data-icon="alert-update"]')) {
-  //   document.querySelector('span[data-icon="alert-update"]').parentElement.parentElement.style.display = 'none';
-  //   console.log("Disabled update available notification");
-  //   updatenotification = 1;
-  // }
-  // // Disable request to allow notifications
-  // if (document.querySelector('span[data-icon="alert-notification"]')) {
-  //   document.querySelector('span[data-icon="alert-notification"]').parentElement.parentElement.style.display = 'none'; 
-  //   console.log("Disabled request allow notification");
-  //   allownotification = 1;
-  // }
+function showchatWindow(){
+  //Make sure to unfocus any focused élément of previous view
+   document.activeElement.blur();
+   
+   //Slide Chatlist panel to the left
+   X.chatList().style.transition= "left 0.30s ease-in-out";
+   X.chatList().style.position= 'absolute'; 
+   X.chatList().style.left= "-100%";
+   
+  //Hide left menu (in case it was oppened)
+   X.leftMenu().style.display = 'none';
+   X.unkownSection2().style.minWidth = "100%"    
+   X.overlayMenus().style.minWidth = "100%"
+   X.overlayMenus().style.width="100%"; 
+   
+   //Activate Upload Panel, in case the user will upload some files
+    X.uploadPannel().style.width="100%";
+    X.uploadPannel().style.minWidth="100%";   
+    X.leftSettingPannel().style.display="none"; 
+
 }
 
-function modaldialogresponsive(){
-  if (document.querySelector('[data-animate-dropdown-item]')){
-    var check = 0;
-    var checkExist = setInterval(function() {
-     	if (document.querySelector("[data-animate-modal-backdrop]")) {
-       	// Delete min-width class to center dialog message
-      	document.querySelector("[data-animate-modal-backdrop]").childNodes[0].style.minWidth = "0px";
-        
-      	if ( check == 0 ) {
-        	clearInterval(checkExist);
-        }
-      }
-      check = 1;
-  	}, 300);
-	} else {
-    document.querySelector("[data-animate-modal-backdrop]").childNodes[0].style.minWidth = "";
-  }
-}
-
-function startnewchat(){
-  var elems = document.querySelector('[data-testid="contact-list-key"]').getElementsByTagName("DIV");
-  for (var i = 0; i<elems.length; i++) {
-    elems[i].onclick = function() {
-
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[2].childNodes[1].style.display = '';
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[4].style.display = '';
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[3].style.display = 'none';
-      menu();
-
-    };
-  }
-}
-
-function settingspanel(){
-  if (document.querySelector('[data-testid="settings-drawer"]')){
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[2].childNodes[0].style.maxWidth = "100%";
-      document.getElementById("app").getElementsByClassName('two')[0].childNodes[2].childNodes[0].style.flex = "0 0 100%";
-  }
-}
+//-----------------------------------------------------------------------------
+//         Functions to handle contactInfo pannel
+//----------------------------------------------------------------------------
 
 function inchatcontactandgroupinfo(){
-  console.log("inchatcontactandgroupinfo")
-  if (document.getElementById("app").getElementsByClassName('three')[0].childNodes[5]){
-      document.getElementById("app").getElementsByClassName('three')[0].childNodes[5].style.width = "90%";
-      document.getElementById("app").getElementsByClassName('three')[0].childNodes[5].style.maxWidth = "100%"; 
+  // console.log("inchatcontactandgroupinfo")
+  if (X.contactInfo()){
+      //We need for this section to use absolute postion
+      X.contactInfo().style.position= "absolute";
+      X.contactInfo().style.width = "100%";
+      X.contactInfo().style.maxWidth = "100%";  
+      X.contactInfo().style.pointerEvents="none";
   }
 }
-function restoreinchatcontactandgroupinfo(){
-  console.log("restoreinchatcontactandgroupinfo")
-  if (document.getElementById("app").getElementsByClassName('two')[0].childNodes[5] !== null){
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[5].style.width = "";
-    document.getElementById("app").getElementsByClassName('two')[0].childNodes[5].style.maxWidth = "";
-  }  
-}
+
+
+
+//-----------------------------------------------------------------------------
+//                           Clean
+//----------------------------------------------------------------------------
+
 function clean() {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
   for(let registration of registrations) {
@@ -261,9 +390,13 @@ function clean() {
 }
 
 
+//-----------------------------------------------------------------------
+//                     End of main thing
+//-----------------------------------------------------------------------
 
-//Injection AUdio testid
-
+//-----------------------------------------------------------------------
+//              Detect Audio évents to trigger Notifications
+//-----------------------------------------------------------------------
 (function() {
   if (window.__my_audio_hook_installed) return;
   window.__my_audio_hook_installed = true;
@@ -279,10 +412,6 @@ function clean() {
     const OrigAudio = window.Audio;
     window.Audio = function(src) {
       const a = new OrigAudio(src);
-      // try {
-      //   // log creation + src
-      //  // logAudioEvent("Audio constructed src=" + (src || ""));
-      // } catch(e){}
       // attach listeners to catch play
       a.addEventListener('play', function(){ logAudioEvent((a.currentSrc || a.src || "")); }, {passive:true});
       a.addEventListener('playing', function(){ logAudioEvent((a.currentSrc || a.src || "")); }, {passive:true});
@@ -307,85 +436,8 @@ function clean() {
           logAudioEvent( src);
         } catch(e){}
         return origPlay.apply(this, arguments);
-      };
-      // also listen to src changes (attribute)
-      const origSetAttribute = Element.prototype.setAttribute;
-      Element.prototype.setAttribute = function(name, value) {
-        try {
-          if ((this.tagName || "").toLowerCase() === "audio" && name === "src") {
-            logAudioEvent(value);
-          }
-        } catch(e){}
-        return origSetAttribute.apply(this, arguments);
-      };
-      // intercept setting .src
-      try {
-        const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-        if (desc && desc.set && !desc.set.__hooked__) {
-          const origSetter = desc.set;
-          desc.set = function(v) {
-            try { logAudioEvent(v); } catch(e){}
-            return origSetter.call(this, v);
-          };
-          Object.defineProperty(HTMLMediaElement.prototype, 'src', desc);
-          desc.set.__hooked__ = true;
-        }
-      } catch(e){}
-    }
-  } catch(e){}
-
-  // 3) Intercepter WebAudio: AudioContext.prototype.createBufferSource + start()
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) {
-      const origCreate = AC.prototype.createBufferSource;
-      AC.prototype.createBufferSource = function() {
-        const srcNode = origCreate.apply(this, arguments);
-        try {
-          const origStart = srcNode.start;
-          srcNode.start = function(/*when, offset, duration*/) {
-            try {
-              // attempt to describe the buffer (duration) or associated info
-              const dur = srcNode.buffer ? srcNode.buffer.duration : "unknown";
-              logAudioEvent("WebAudio start bufferDuration=" + dur);
-            } catch(e){}
-            return origStart.apply(this, arguments);
-          };
-        } catch(e){}
-        return srcNode;
-      };
-    }
-  } catch(e){}
-
-  // 4) MutationObserver to catch dynamically added <audio> elements
-  try {
-    const mo = new MutationObserver(function(mutations) {
-      for (const m of mutations) {
-        for (const n of m.addedNodes || []) {
-          try {
-            if (n && n.tagName && n.tagName.toLowerCase() === 'audio') {
-              const a = n;
-              logAudioEvent( (a.currentSrc || a.src || ""));
-              a.addEventListener('play', function(){ logAudioEvent((a.currentSrc||a.src||"")); }, {passive:true});
-            }
-          } catch(e){}
-        }
       }
-    });
-    mo.observe(document, { childList: true, subtree: true });
+    }
   } catch(e){}
 
-  // 5) Optional: intercept creation via createElement
-  try {
-    const origCreate = Document.prototype.createElement;
-    Document.prototype.createElement = function(tagName) {
-      const node = origCreate.apply(this, arguments);
-      try {
-        if ((tagName||"").toLowerCase() === 'audio') {
-          node.addEventListener('play', function(){ logAudioEvent(  (node.currentSrc||node.src||"")); }, {passive:true});
-        }
-      } catch(e){}
-      return node;
-    };
-  } catch(e){}
 })();
