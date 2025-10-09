@@ -52,4 +52,8 @@ jobs:
         env:
           OPENSTORE_API_KEY: ${{ secrets.OPENSTORE_TOKEN }}
         run: |
-          cd whatsweb && clickable publish "* $(git log -1 --pretty=%B | head -1)"
+          docker run \
+            --rm \
+            -v $(pwd)/whatsweb:/app \
+            clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
+            sh -c "cd /app && clickable publish \"* $(git log -1 --pretty=%B | head -1)\""
