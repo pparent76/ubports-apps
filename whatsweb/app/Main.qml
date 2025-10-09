@@ -3,15 +3,70 @@ import Ubuntu.Components 1.3
 import QtQuick.Window 2.2
 import Morph.Web 0.1
 import "UCSComponents"
-import QtWebEngine 1.7
+import QtWebEngine 1.9
 import Qt.labs.settings 1.0
 import QtSystemInfo 5.5
 import Ubuntu.Components.ListItems 1.3 as ListItemm
 import Ubuntu.Content 1.3
+import Pparent.Notifications 1.0
 
 
 MainView {
   id: mainView
+  property int lastUnreadCount: -1;
+  property var lastNotifyTimestamp: 0;  
+
+  //Object from notification module
+  NotificationHelper {
+        id: notifier
+        push_app_id:"alefnode.whatsweb_whatsweb"
+  }
+    
+  //Function to allow notification while avoiding flooding at the same time
+  function notifyBackup(title,msg) {
+      var currentTimestamp=Date.now();  // timestamp en millisecondes
+        if (currentTimestamp - lastNotifyTimestamp > 5000) {
+            //Send notifications only if app is not active
+            if (!(Qt.application.active))
+            {
+              lastNotifyTimestamp=currentTimestamp;  
+              notifier.showNotificationMessage(title,msg);
+            }
+        }
+  }
+  
+  function notifyMain(title,msg) {
+      if (!(Qt.application.active))
+      { 
+        lastNotifyTimestamp=Date.now();  // timestamp en millisecondes
+        notifier.showNotificationMessage(title,msg);
+      }
+  }  
+
+
+  Timer {
+    id: timer1
+    running: false
+    repeat: false
+    interval: 2000
+    onTriggered: function() {
+    notifyBackup("New Whatsapp Audio Notification","")
+    timer1.running = false;
+    }
+  }
+  
+  Timer {
+    id: timer2
+    running: false
+    repeat: false
+    interval: 1100
+    property string msg: "notif"    
+    onTriggered: function() {
+    notifyBackup(msg,"")
+    timer2.running = false;
+    }
+  }
+
 
   ScreenSaver {
     id: screenSaver
@@ -35,7 +90,7 @@ MainView {
 
   //anchorToKeyboard: true
 
-
+  
   property list<ContentItem> importItems
 
   PageStack {
@@ -47,19 +102,26 @@ MainView {
     Page {
       id: pageMain
       anchors.fill: parent
-
+      
       WebEngineView {
         id: webview
+        audioMuted: !Qt.application.active
         anchors{ fill: parent }
         focus: true
         property var currentWebview: webview
         settings.pluginsEnabled: true
-
+        
         profile:  WebEngineProfile {
           id: webContext
-          httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36"
+          httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.144 Safari/537.36"
           storageName: "Storage"
           persistentStoragePath: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine"
+          //----------------------------------------------------------------------
+          //  Notification based on web desktop notifications (Higher priority)
+          //----------------------------------------------------------------------   
+          onPresentNotification: (notification) => {
+                 notifyMain(notification.title, notification.message);
+          }
         }
         anchors {
           fill:parent
@@ -92,6 +154,40 @@ MainView {
         onFeaturePermissionRequested: {
 	    grantFeaturePermission(securityOrigin, feature, true);
         }
+        //----------------------------------------------------------------------
+        //   Notification based on title changed (Medium priority wait 100ms)
+        //----------------------------------------------------------------------        
+        onTitleChanged: {
+             // 1a. look for a number inside parentheses at start or end
+            var match = title.match(/^\s*\((\d+)\)/);
+            var unread = -1;
+            if (match && match.length > 1) {
+                unread = parseInt(match[1]);
+            }
+            if ( unread>lastUnreadCount && unread>0  )
+            {
+              //Send notification in 25ms through timer2
+              timer2.msg = unread+" whatsapp message unread";
+              timer2.running = true;
+            }
+            lastUnreadCount=unread
+            if (unread > 0)
+              notifier.updateCount(unread)
+            else
+              notifier.updateCount(0)
+        }
+        //----------------------------------------------------------------------------
+        //  Notification based on audio sound file played (LOWER PRIORITY wait 300ms)
+        //----------------------------------------------------------------------------
+        onJavaScriptConsoleMessage: function(level, message, line, sourceId) {
+            
+            if (message.startsWith("[DbgAud] https://static.whatsapp.net/")) {
+                //Send notification in 50ms through timer1
+                timer1.running = true;
+            }
+        }
+        
+        
       }
     }
   }
