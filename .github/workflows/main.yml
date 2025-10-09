@@ -19,14 +19,17 @@ jobs:
          arch: [arm64, amd64]
          ut_version: ['20.04', 'ut24.04-1.x']
     steps:
+      # 1. Descarga el código de tu repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # 2. Configura Docker
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      # 3. Compila el paquete .click
       - name: Build .click package
         env:
           BUILD_TYPE: ${{ (matrix.build == 'Debug') && '--debug' || '' }}
@@ -35,16 +38,18 @@ jobs:
             --rm \
             -v $(pwd)/whatsweb:/app \
             clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
-            clickable --project-dir=/app build --verbose ${BUILD_TYPE}
+            sh -c "cd /app && clickable build --verbose ${BUILD_TYPE}"
+      # 4. Sube el paquete .click como un artefacto
       - name: Upload .click artifact
         uses: actions/upload-artifact@v4
         with:
           name: "whatsweb-${{ matrix.arch }}-${{ matrix.ut_version }}"
           path: "whatsweb/build/*/app/*.click"
           if-no-files-found: ignore
+      # 5. Publica en la OpenStore
       - name: Publish to OpenStore
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
         env:
           OPENSTORE_API_KEY: ${{ secrets.OPENSTORE_TOKEN }}
         run: |
-          clickable publish --project-dir=whatsweb "* $(git log -1 --pretty=%B | head -1)"
+          cd whatsweb && clickable publish "* $(git log -1 --pretty=%B | head -1)"
