@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   create:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+' # Se activa al crear un tag como v1.2.3
 jobs:
   build-and-publish:
     name: Build & Publish for ${{ matrix.ut_version }} (${{ matrix.arch }})
@@ -23,15 +23,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Build .click package
-        uses: tuxecure/clickable@v1
         env:
           BUILD_TYPE: ${{ (matrix.build == 'Debug') && '--debug' || '' }}
-          CLICKABLE_FRAMEWORK: ${{ (matrix.ut_version == '20.04') && 'ubuntu-sdk-20.04' || 'ubuntu-touch-24.04-1.x' }}
-        with:
-          path: ./whatsweb
-          image: clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }}
-          run: clickable build --verbose ${BUILD_TYPE}
+        run: |
+          docker run \
+            --rm \
+            -v $(pwd)/whatsweb:/app \
+            clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
+            clickable --project-dir=/app build --verbose ${BUILD_TYPE}
       - name: Upload .click artifact
         uses: actions/upload-artifact@v4
         with:
