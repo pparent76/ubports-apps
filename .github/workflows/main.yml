@@ -53,13 +53,14 @@ jobs:
         env:
           OPENSTORE_API_KEY: ${{ secrets.OPENSTORE_TOKEN }}
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          TAG_NAME="${{ github.ref_name }}"
+          echo "Detectada tag: $TAG_NAME"
 
           # Si el workflow se ejecuta por un tag, intentamos obtener su descripción
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            DESC=$(git for-each-ref "refs/tags/$TAG_NAME" --format='%(contents)')
-          else
-            # Si no es tag, usamos el último mensaje de commit
+          DESC=$(git for-each-ref "refs/tags/$TAG_NAME" --format='%(contents)')
+
+          # Si la descripción está vacía (tag ligera), usar mensaje de commit
+          if [ -z "$DESC" ]; then
             DESC=$(git log -1 --pretty=%B | head -1)
           fi
 
