@@ -53,9 +53,21 @@ jobs:
         env:
           OPENSTORE_API_KEY: ${{ secrets.OPENSTORE_TOKEN }}
         run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+
+          # Si el workflow se ejecuta por un tag, intentamos obtener su descripción
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            DESC=$(git for-each-ref "refs/tags/$TAG_NAME" --format='%(contents)')
+          else
+            # Si no es tag, usamos el último mensaje de commit
+            DESC=$(git log -1 --pretty=%B | head -1)
+          fi
+
+          echo "Descripción usada para publicar:"
+          echo "$DESC"
           docker run \
             --rm \
             -v $(pwd)/whatsweb:/app \
             -e OPENSTORE_API_KEY \
             clickable/ci-${{ matrix.ut_version }}-${{ matrix.arch }} \
-            sh -c "cd /app && clickable publish \"* $(git log -1 --pretty=%B | head -1)\""
+            sh -c "cd /app && clickable publish \"$(printf '%s' "$DESC")\""
