@@ -17,7 +17,7 @@ jobs:
       matrix:
          build: [Release]
          arch: [arm64]
-         ut_version: ['20.04', 'ut24.04-1.x']
+         ut_version: ['20.04']
     steps:
       # 1. Descarga el código de tu repositorio
       - name: Checkout repository
