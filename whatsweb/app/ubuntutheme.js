@@ -28,12 +28,14 @@ const X = {
   smileyWrapper: () => document.getElementById('expressions-panel-container'),
   smileyPanel: () => document.querySelector('#expressions-panel-container > :first-child > :first-child'),
   
-
+  newChatButton: () => document.querySelector('[data-icon="new-chat-outline"]').parentElement.parentElement,
+  archivedChatButton: () => document.querySelector('#pane-side').childNodes[0], 
   
   //Landing elements (Only present temporarilly while whatsapp is loading)
   landingWrapper: () => document.querySelector('.landing-wrapper'),
-  landingHeader: () => document.querySelector('.landing-header')
-  
+  landingHeader: () => document.querySelector('.landing-header'),
+  mainDiv: () =>  document.querySelector("div#main"),
+  chatHeader: () =>  document.querySelector("div#main").querySelector("header")
 };
 
 //-------------------------------------------------------------------------------------
@@ -80,6 +82,9 @@ updatenotificacion = 0;
 allownotification = 0;
 var lastClickContact = 0;
 var lastClickEditable = 0;
+var isInArchivedMenu = 0;
+var isInNewChatMenu = 0;
+var isInCommunity = 0;
 
 //-----------------------------------------------------
 //Request by default webnofications permission
@@ -144,6 +149,13 @@ var checkExist = setInterval(function() {
 //----------------------------------------------------------------------
 function main(){
   console.log("Call main function")
+  
+  //Adapt fontsize
+  addCss("span { font-size: 104% !important; }");    
+  addCss(".selectable-text { font-size: 110% !important; }");  
+  addCss(".message-out {  padding-right: 20px !important; }");
+  addCss(".message-in {  padding-left: 20px !important; }");  
+  
   X.overlayMenus().style.width="0";
   
   showchatlist();  
@@ -182,26 +194,69 @@ function main(){
     });
     observer.observe(X.smileyWrapper(), { childList: true, subtree: true });
   }
+  
+  //Send theme information to mainView
+  console.log("[ThemeBackgroundColorDebug]"+getComputedStyle(X.leftMenu()).getPropertyValue('--WDS-surface-default').trim());
 
+  //Open menu for new chat list
+  X.newChatButton().addEventListener('click', () => {
+    isInNewChatMenu=1; isInCommunity=0; isInArchivedMenu=0;
+    if ( X.leftMenu().style.display == 'none' )
+        toggleLeftMenu();
+  });
+  
+  //Open menu for archivedMenu
+  if (X.archivedChatButton().tagName.toLowerCase() === 'button') {
+    X.archivedChatButton().addEventListener('click', () => {
+      isInArchivedMenu=1;isInCommunity=0; isInNewChatMenu=0;
+      if ( X.leftMenu().style.display == 'none' )
+          toggleLeftMenu();
+    });  
+  }
+  
+  
+  // Créer un observer pour le body
+  const observer = new MutationObserver((mutations, obs) => {
+    
+    if (document.querySelector('.three')) {
+    // Handle contactInfo Openned panel
+    if (X.upperWrapper() !== undefined){
+      if (X.contactInfo() !== undefined){
+        inchatcontactandgroupinfo();
+      }
+    }
+    }
+    
+    backupBackButton()
+    
+  });
+
+  // Observer le body entier pour toutes les modifications
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });  
+  
   //Request by default webnofications permission
   Notification.requestPermission();
 }
 
+//---------------------------------------------------------------------
 //------------------------------------------------------------
 //  Analize JS after every click on APP and execute Actions
 //------------------------------------------------------------
+//---------------------------------------------------------------------
+
+//---------------------------------------------
+// Handle Main navigation to chatWindow
+//---------------------------------------------
 window.addEventListener("click", function() {
-    console.log("Click")
-  
   lastClickEditable=0
   const grid = event.target.closest('[role="grid"]');
   if (grid) {
       if (lastClickContact==0)
       {
-        showchatWindow();
-        setTimeout(() => {
-        addBackButtonToChatView();
-          }, 200);
+        showchatWindow();     
       }
       lastClickContact=1
   }
@@ -214,15 +269,113 @@ window.addEventListener("click", function() {
       lastClickEditable=1;
       }
   }
-  
+ 
+}); 
 
-  // Handle contactInfo Openned panel
-  if (X.upperWrapper() !== undefined){
-    if (X.contactInfo() !== undefined){
-      inchatcontactandgroupinfo();
+//----------------------------------------------------
+// Security to add back buttons it not present
+//---------------------------------------------------
+window.addEventListener("click", function() {
+backupBackButton();
+}); 
+
+function backupBackButton()
+{
+ if (X.chatList().style.left== "-100%") {
+  if ( X.mainDiv() && X.chatHeader() )
+  {
+    if (! X.chatHeader().querySelector('#back_button') )
+    {
+    addBackButtonToChatView();  
     }
   }
+  else
+  {
+    showchatlist()
+  }
+} 
+}
   
+//---------------------------------------------
+// Handle navigation form leftmenu to chatWindow
+//---------------------------------------------
+window.addEventListener("click", function() {
+  
+  //Cette fonction gère seulement si le menu de gauche est affiché
+  if ( X.leftMenu().style.display == 'none' )
+    return;
+  
+  //Click on a chat in menu -> Show chat menu
+  if (isInNewChatMenu ==1
+    && event.target.closest('[role="listitem"]')
+    && event.target.closest('[role="listitem"]').firstElementChild.getAttribute('role') === 'button'){
+      showchatWindow();
+  }  
+  
+  if ( event.target.getAttribute('data-icon') === 'community-filled-refreshed-32' || event.target.getAttribute('data-icon') === 'community-refreshed-32')
+  {
+   isInCommunity=1;
+   isInArchivedMenu=0;
+   isInNewChatMenu=0;    
+   addBackButtonToChatViewWithTimeout();   
+  }
+  
+
+  //Changing view in menus
+  if (event.target.getAttribute('data-icon') === 'status-refreshed' 
+    || event.target.getAttribute('data-icon') === 'newsletter-outline'
+    || event.target.getAttribute('data-icon') === 'settings-refreshed'
+    || event.target.getAttribute('data-icon') === 'status-filled-refreshed' 
+    || event.target.getAttribute('data-icon') === 'newsletter-outline'
+    || event.target.getAttribute('data-icon') === 'settings-filled-refreshed')
+  {
+    console.log("view changed")
+   isInArchivedMenu=0;
+   isInNewChatMenu=0;
+   isInCommunity=0;
+  }
+  
+  
+  //Click on a chat in menu -> Show chat menu
+  if (isInArchivedMenu ==1
+    && X.leftSettingPannel().contains(event.target) 
+    && event.target.closest('[role="listitem"]')
+    && event.target.closest('[role="listitem"]').firstElementChild.hasAttribute('aria-selected')){
+      showchatWindow();
+  }
+  
+  //Click on a chat in menu -> Show chat menu
+  if (isInNewChatMenu ==1
+    && X.leftSettingPannel().contains(event.target) 
+    && event.target.closest('[role="listitem"]')
+    && event.target.closest('[role="listitem"]').firstElementChild.getAttribute('role') === 'button'){
+      showchatWindow();
+  }  
+
+  //Click on a chat in menu -> Show chat menu
+  if (isInCommunity ==1
+    && X.leftSettingPannel().contains(event.target) 
+    && event.target.closest('[role="listitem"]')){
+      if (event.target.closest('[role="listitem"]').querySelector("[title]"))
+        showchatWindow();
+      else
+        addBackButtonToChatViewWithTimeout();
+  }  
+  
+  if (event.target.getAttribute('data-icon') === 'chat-filled-refreshed' || event.target.getAttribute('data-icon') === 'chat-refreshed')
+  {
+   isInArchivedMenu=0;
+   isInNewChatMenu=0;  
+   isInCommunity=0;
+   addBackButtonToChatViewWithTimeout();   
+  }
+    
+}); 
+  
+//---------------------------------------------
+// Handle quick copy to ClipBoard
+//---------------------------------------------
+window.addEventListener("click", function() {
   //For Quick Copy to ClipBoard system
   if ( lastClickContact != 1 )
   {
@@ -270,7 +423,8 @@ function toggleLeftMenu(){
            X.leftMenu().style.display = 'none';
            X.unkownSection2().style.minWidth = "100%"   
         }, 500);
-  
+        //Send theme information to mainView when closing menus
+          console.log("[ThemeBackgroundColorDebug]"+getComputedStyle(X.leftMenu()).getPropertyValue('--WDS-surface-default').trim());
       }
   }
 }
@@ -280,7 +434,7 @@ function toggleLeftMenu(){
 //                 inside main chat list header
 //------------------------------------------------------------------------------------
 function addLeftMenuButtonToChatList(){
-    addCss(".added_menu_button span { display:block; height: 100%; width: 100%;}.added_menu_button {  z-index:500; width:50px; height:45px; } html[dir] .added_menu_button { border-radius:50%; } html[dir=ltr] .added_menu_button { right:11px } html[dir=rtl] .added_menu_button { left:11px } .added_menu_button path { fill:#000000; fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
+    addCss(".added_menu_button span { display:block; height: 100%; width: 100%;}.added_menu_button {  z-index:500; width:50px; height:45px; } html[dir] .added_menu_button { border-radius:50%; } html[dir=ltr] .added_menu_button { right:11px } html[dir=rtl] .added_menu_button { left:11px } .added_menu_button path { fill:var(--panel-header-icon); fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
 
     var newHTML         = document.createElement('div');
     newHTML.className += "added_menu_button";
@@ -307,7 +461,7 @@ function addLeftMenuButtonToChatList(){
 //----------------------------------------------------------------------------
 function addBackButtonToChatView(){
 
-    addCss(".back_button span { display:block; height: 100%; width: 100%;}.back_button {  z-index:200; width:37px; height:45px; } html[dir] .back_button { border-radius:50%; } html[dir=ltr] .back_button { right:11px } html[dir=rtl] .back_button { left:11px } .back_button path { fill:#000000; fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
+    addCss(".back_button span { display:block; height: 100%; width: 100%;}.back_button {  z-index:200; width:37px; height:45px; } html[dir] .back_button { border-radius:50%; } html[dir=ltr] .back_button { right:11px } html[dir=rtl] .back_button { left:11px } .back_button path { fill:var(--panel-header-icon); fill-opacity:1 } .svg_back { transform: rotate(90deg); height: 100%;}");
     
     var newHTML         = document.createElement('div');
     newHTML.className += "back_button";
@@ -315,11 +469,8 @@ function addBackButtonToChatView(){
     newHTML.addEventListener("click", showchatlist);
     newHTML.innerHTML   = "<span data-icon='left' id='back_button' ><svg class='svg_back' id='Layer_1' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 21 21' width='21' height='21'><path fill='#000000' fill-opacity='1' d='M4.8 6.1l5.7 5.7 5.7-5.7 1.6 1.6-7.3 7.2-7.3-7.2 1.6-1.6z'></path></svg></span>";
 
-    //Insert it, TODO improve the way it is inserted    
-    document.querySelectorAll('header').forEach(header => {
-        if (  header.querySelector('[data-icon="search-refreshed"]') && ! header.querySelector('#back_button') )
-          header.prepend(newHTML); 
-    });
+    if (! X.chatHeader().querySelector('#back_button') )
+        X.chatHeader().prepend(newHTML);
 }
 
 
@@ -334,6 +485,12 @@ function showchatlist(){
   X.chatList().style.transition= "left 0.30s ease-in-out";
   X.chatList().style.position= 'absolute';
   X.chatList().style.left= '0';
+  
+  //Comming back to community pannel, and left pannel was open close it
+  if (isInCommunity ==1 && X.leftMenu().style.display != 'none' )
+  {
+        toggleLeftMenu();
+  }
 
 }
 
@@ -356,9 +513,25 @@ function showchatWindow(){
     X.uploadPannel().style.width="100%";
     X.uploadPannel().style.minWidth="100%";   
     X.leftSettingPannel().style.display="none"; 
-
+    addBackButtonToChatViewWithTimeout();
 }
 
+function addBackButtonToChatViewWithTimeout()
+{
+      //Add back Button
+    setTimeout(() => {
+        addBackButtonToChatView();
+    }, 20);
+
+    setTimeout(() => {
+    addBackButtonToChatView();
+    }, 300);    
+    
+    setTimeout(() => {
+    addBackButtonToChatView();
+    }, 1500); 
+  
+}
 //-----------------------------------------------------------------------------
 //         Functions to handle contactInfo pannel
 //----------------------------------------------------------------------------
@@ -441,3 +614,80 @@ function clean() {
   } catch(e){}
 
 })();
+
+
+
+//----------------------------------------------------------------------------------------
+//                        Handle download Blobs to local storage
+//-----------------------------------------------------------------------------------------
+
+const blobMap = new Map();
+var downloadedBlob;
+
+  // 1) Surveiller la création des blob: URLs
+  const origCreateObjectURL = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = function (blob) {
+    const url = origCreateObjectURL(blob);
+    try {
+      blobMap.set(url, { blob, createdAt: new Date() });
+    } catch (e) { /* fail silently si Map non permise */ }
+    return url;
+  };
+
+  // 1b) Surveiller revoke (nettoyage)
+  const origRevokeObjectURL = URL.revokeObjectURL.bind(URL);
+  URL.revokeObjectURL = function (url) {
+    if (blobMap.has(url)) {
+      blobMap.delete(url);
+    }
+    return origRevokeObjectURL(url);
+  };
+
+
+  
+  function saveBlob(blob, key) {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open("MyDB", 1);
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains("blobs")) {
+                db.createObjectStore("blobs");
+            }
+        };
+
+        request.onsuccess = (event) => {
+            const db = event.target.result;
+            const tx = db.transaction("blobs", "readwrite");
+            const store = tx.objectStore("blobs");
+            store.put(blob, key);
+
+            tx.oncomplete = () => {resolve(); console.log('[DownloadBlob] test');}
+            tx.onerror = (e) => reject(e);
+        };
+
+        request.onerror = (e) => reject(e);
+    });
+}
+
+  // 2) Intercepter les clics sur les liens <a> pointant vers blob:
+  document.addEventListener('click', function (ev) {
+    // ne pas empêcher le comportement par défaut, juste logger
+    let target = ev.target;
+    while (target && target !== document) {
+      if (target.tagName === 'A' && target.href) {
+        try {
+          const href = target.href;
+          if (href.startsWith('blob:')) {
+            //console.log('[DownloadBlob]', href);
+            // si tu veux aussi accéder au Blob objet :
+            const entry = blobMap.get(href);
+            downloadedBlob=entry;
+            saveBlob(downloadedBlob.blob,"testpierre")
+          }
+        } catch (e) { /* ignore */ }
+        break; // qu'on trouve ou pas, on sort
+      }
+      target = target.parentNode;
+    }
+  }, true); // capture phase pour attraper tôt

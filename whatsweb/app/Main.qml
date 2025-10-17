@@ -8,78 +8,47 @@ import Qt.labs.settings 1.0
 import QtSystemInfo 5.5
 import Ubuntu.Components.ListItems 1.3 as ListItemm
 import Ubuntu.Content 1.3
-import Pparent.Notifications 1.0
+import Pparent.DownloadHelper 1.0  
 
 
 MainView {
   id: mainView
+  
+  property var appID: "alefnode.whatsweb";
+  property var hook: "whatsweb";  
+  property var localStorage: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine";  
+  
+  
   property int lastUnreadCount: -1;
   property var lastNotifyTimestamp: 0;  
 
-  //Object from notification module
-  NotificationHelper {
-        id: notifier
-        push_app_id:"alefnode.whatsweb_whatsweb"
-  }
     
-  //Function to allow notification while avoiding flooding at the same time
-  function notifyBackup(title,msg) {
-      var currentTimestamp=Date.now();  // timestamp en millisecondes
-        if (currentTimestamp - lastNotifyTimestamp > 5000) {
-            //Send notifications only if app is not active
-            if (!(Qt.application.active))
-            {
-              lastNotifyTimestamp=currentTimestamp;  
-              notifier.showNotificationMessage(title,msg);
-            }
-        }
-  }
-  
-  function notifyMain(title,msg) {
-      if (!(Qt.application.active))
-      { 
-        lastNotifyTimestamp=Date.now();  // timestamp en millisecondes
-        notifier.showNotificationMessage(title,msg);
-      }
-  }  
+ DownloadHelper {
+        id: downloadHelper
+        blob_path: localStorage+"/IndexedDB/https_web.whatsapp.com_0.indexeddb.blob/"
+    }   
+    
+    
+ Notifier {
+    id: notifier
+     push_app_id: appID + "_" + hook
+ }
 
 
-  Timer {
-    id: timer1
-    running: false
-    repeat: false
-    interval: 2000
-    onTriggered: function() {
-    notifyBackup("New Whatsapp Audio Notification","")
-    timer1.running = false;
-    }
-  }
-  
-  Timer {
-    id: timer2
-    running: false
-    repeat: false
-    interval: 1100
-    property string msg: "notif"    
-    onTriggered: function() {
-    notifyBackup(msg,"")
-    timer2.running = false;
-    }
-  }
-
-
-  ScreenSaver {
-    id: screenSaver
-    screenSaverEnabled: !(Qt.application.active)
-  }
   objectName: "mainView"
   //theme.name: "Ubuntu.Components.Themes.SuruDark"
-  applicationName: "alefnode.whatsweb"
+  applicationName: appID
   backgroundColor : "transparent"
 
 
   property list<ContentItem> importItems
 
+  
+  ScreenSaver {
+    id: screenSaver
+    screenSaverEnabled: !(Qt.application.active)
+  }
+  
   PageStack {
     id: mainPageStack
     anchors.fill: parent
@@ -90,33 +59,10 @@ MainView {
       id: pageMain
       anchors.fill: parent
       
-
-    Rectangle {
-        visible: !Qt.application.active
-        anchors.fill: parent
-        color: "#f0f0f0"  // gris très clair
-        Image {
-            id: screensaverBackground
-            source: "../screensaver.png"  // Mets ici ton icône
-            anchors.centerIn: parent
-
-            // 50% de la largeur de l'écran
-            width: parent.width
-            height: parent.height  // Pour rester carré
-            
-        }
-        Image {
-            id: icon
-            source: "../icon-splash.png"  // Mets ici ton icône
-            anchors.centerIn: parent
-
-            // 50% de la largeur de l'écran
-            width: parent.width * 0.5
-            height: width  // Pour rester carré
-
-            fillMode: Image.PreserveAspectFit
-        }
-    }  
+      
+      ScreenSaverView {
+          id: screenSaverView
+      }
       
       //Webview-----------------------------------------------------------------------------------------------------
       WebEngineView {
@@ -128,10 +74,12 @@ MainView {
         focus: true
         property var currentWebview: webview
         settings.pluginsEnabled: true
+        zoomFactor: mainView.width<mainView.height ? Math.round(100 * mainView.width / 410 ) / 100 : Math.round(100 * mainView.width / 900 ) / 100
         
         onKeyboardSizeChanged: {
         // Échapper correctement les quotes si nécessaire
-        const jsCode = `document.querySelector('footer').style.paddingBottom = "${keyboardSize}px"`;
+        var realKeyboardSize=keyboardSize/zoomFactor
+        const jsCode = `document.querySelector('footer').style.paddingBottom = "${realKeyboardSize}px"`;
         webview.runJavaScript(jsCode);
         }
         
@@ -139,23 +87,16 @@ MainView {
           id: webContext
           httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.144 Safari/537.36"
           storageName: "Storage"
-          downloadPath: "/home/phablet/.cache/alefnode.whatsweb/Download/"
-          persistentStoragePath: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine"
+          persistentStoragePath: localStorage
           //----------------------------------------------------------------------
           //  Notification based on web desktop notifications (Higher priority)
           //----------------------------------------------------------------------   
           onPresentNotification: (notification) => {
-                 notifyMain(notification.title, notification.message);
+                notifier.notifyMain(notification.title, notification.message);
           }
           
           onDownloadRequested: {
-                //toast.show("Téléchargement demandé : " + downloadItem.url)
-                // On choisit un chemin temporaire
-                downloadItem.accept()
-                //downloadItem.finished.connect(function() {
-                //console.log("Téléchargement terminé :", downloadItem.path)
-                //Qt.openUrlExternally("file://" + downloadItem.path)
-                //})
+              //Not working for now in Qt5
           }
         
         }//End WebEngineProfile
@@ -176,13 +117,17 @@ MainView {
           }
           ]
         onFileDialogRequested: function(request) {
-          request.accepted = true;
+           request.accepted = true;
           var importPage = mainPageStack.push(Qt.resolvedUrl("ImportPage.qml"),{"contentType": ContentType.All, "handler": ContentHandler.Source})
           importPage.imported.connect(function(fileUrl) {
             console.log(String(fileUrl).replace("file://", ""))
             request.dialogAccept(String(fileUrl).replace("file://", ""));
             mainPageStack.pop(importPage)
           })
+          importPage.cancel.connect(function() {
+            request.dialogAccept("")
+            mainPageStack.pop(importPage)
+          })          
         }
         onNewViewRequested: {
             request.action = WebEngineNavigationRequest.IgnoreRequest
@@ -195,7 +140,7 @@ MainView {
 	    grantFeaturePermission(securityOrigin, feature, true);
         }
         //----------------------------------------------------------------------
-        //   Notification based on title changed (Medium priority wait 100ms)
+        //   Notification based on title changed (medium priority)
         //----------------------------------------------------------------------        
         onTitleChanged: {
              // 1a. look for a number inside parentheses at start or end
@@ -206,9 +151,7 @@ MainView {
             }
             if ( unread>lastUnreadCount && unread>0  )
             {
-              //Send notification in 25ms through timer2
-              timer2.msg = unread+" whatsapp message unread";
-              timer2.running = true;
+              notifier.triggerDelayedNotification2(unread+" whatsapp message unread");
             }
             lastUnreadCount=unread
             if (unread > 0)
@@ -216,14 +159,16 @@ MainView {
             else
               notifier.updateCount(0)
         }
-        //----------------------------------------------------------------------------
-        //  Notification based on audio sound file played (LOWER PRIORITY wait 300ms)
-        //----------------------------------------------------------------------------
+        
+
+
         onJavaScriptConsoleMessage: function(level, message, line, sourceId) {
-            
+          //----------------------------------------------------------------------------
+          //  Notification based on audio sound file played (Low priority)
+          //---------------------------------------------------------------------------
             if (message.startsWith("[DbgAud] https://static.whatsapp.net/")) {
                 //Send notification in 50ms through timer1
-                timer1.running = true;
+                notifier.triggerDelayedNotification1("New Whatsapp audio notification");
             }
             if (message.startsWith("[ClipBoardCopy]")) {
                 //Send notification in 50ms through timer1
@@ -231,74 +176,51 @@ MainView {
                 //textEdit.text = message
                 textEdit.selectAll()
                 textEdit.copy()
-                toast.show("Message copied to clipboard!")
+                toast.show("Message copied!")
             }
             if (message.startsWith("[ShowDebug]")) {
                 toast.show(message.replace(/^\[ShowDebug\]\s*/, ""))
-            }            
+            }  
+            
+            //Handle Download when Js tells us a file has been saved to local storage
+            if (message.startsWith("[DownloadBlob]")) {
+                let output = downloadHelper.getLastDownloaded()
+                var exportPage = mainPageStack.push(Qt.resolvedUrl("ExportPage.qml"),{"url": Qt.resolvedUrl("file://"+output),"contentType": ContentType.All})
+            } 
+            
+            if (message.startsWith("[ThemeBackgroundColorDebug]")) {
+              
+              
+              if ( message.replace(/^\[ThemeBackgroundColorDebug\]\s*/, "") == "#FFFFFF" )
+              {
+               screenSaverView.backgroundSource="Backgrounds/screensaver.png";
+              }
+              else
+               screenSaverView.backgroundSource="Backgrounds/screensaver-black.png" ;
+              notificationsHowto.visible= false;
+            }
         }
         
+ 
+
       } //End webview--------------------------------------------------------------------------------------------
+      
+
+      //Dummy textedit to me able to copy to ClipBoard
      TextEdit{
         id: textEdit
         visible: false
       }
-Rectangle {
+      
+    Toast {
     id: toast
-    radius: 8
-    color: "#d9fdd3"
-    z:100
-    opacity: 0
-    visible: false
-    anchors.bottom: parent.bottom
-    anchors.left: parent.left 
-    anchors.bottomMargin: 14
-    anchors.leftMargin: 100
-   // La taille s'adapte automatiquement au texte
-    implicitWidth: toastRow.width + 24
-    implicitHeight: toastRow.height + 3
-
-    Row {
-        id: toastRow
-        anchors.centerIn: parent
-        spacing: 7 // espace entre icône et texte
-        padding: 12
-
-        Image {
-            id: toastIcon
-            source: Qt.resolvedUrl("Icons/check.png")  // ton icône ici
-            width: 20
-            height: 20
-            visible: source !== ""
-        }
-
-        Text {
-            id: toastText
-            color: "black"
-            font.pixelSize: 14
-            font.bold: true
-        }
+    }
+    
+    NotificationsHowto{
+      id: notificationsHowto
+      pageStack: mainPageStack
     }
 
-    Behavior on opacity {
-        NumberAnimation { duration: 300 }
-    }
-
-    Timer {
-        id: timer
-        repeat: false
-        interval: 2000
-        onTriggered: { toast.opacity = 0; Qt.callLater(() => toast.visible = false) }
-    }
-
-    function show(msg) {
-        toastText.text = msg
-        toast.visible = true
-        toast.opacity = 1
-        timer.restart()
-        shown()
-    }
-  }
       
     }
     
