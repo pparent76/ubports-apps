@@ -1,11 +1,12 @@
 [Desktop Entry]
 Name=WhatsWeb
 Comment=Whatsapp with Responsive
-Exec=qmlscene %u -I qml-plugins/ app/Main.qml  --scaling --multisample --gles --disable-gpu
+Exec=qmlscene %u -I qml-plugins/ app/Main.qml  --scaling --multisample --gles 
 Terminal=false
 Type=Application
 Icon=icon.png
 X-Ubuntu-Touch=true
+X-Lomiri-Touch=true
 
 X-Ubuntu-Splash-Color=#ffffff
 X-Ubuntu-Splash-Image=icon-splash.png
