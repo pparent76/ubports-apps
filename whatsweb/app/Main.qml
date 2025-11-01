@@ -8,7 +8,7 @@ import Qt.labs.settings 1.0
 import QtSystemInfo 5.5
 import Ubuntu.Components.ListItems 1.3 as ListItemm
 import Ubuntu.Content 1.3
-import Pparent.DownloadHelper 1.0  
+import Pparent.DownloadHelper 1.0
 
 
 MainView {
@@ -16,12 +16,33 @@ MainView {
   
   property var appID: "alefnode.whatsweb";
   property var hook: "whatsweb";  
-  property var localStorage: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine";  
+  property var localStorage: "/home/phablet/.cache/alefnode.whatsweb/alefnode.whatsweb/QtWebEngine";    
   
   
   property int lastUnreadCount: -1;
   property var lastNotifyTimestamp: 0;  
 
+    
+  Settings {
+        id: config
+        category: "AppSettings"
+
+        property int webviewWidthPortait: 410
+        property int webviewWidthLandscape: 900
+        property int textFontSize: 110
+        property int spanFontSize: 104
+
+        property bool enableDesktopNotifications: true
+        property bool enableTitleChangeNotifications: true
+        property bool enableSoundNotifications: true
+        property bool enableNotificationCounter: true
+
+        property bool enableScreensaver: true
+        property bool disableBackgroundAudio: true
+
+        property bool enableQuickCopy: true
+        property bool enableGpu: true
+    }
     
  DownloadHelper {
         id: downloadHelper
@@ -36,21 +57,23 @@ MainView {
 
 
   objectName: "mainView"
-  //theme.name: "Ubuntu.Components.Themes.SuruDark"
   applicationName: appID
   backgroundColor : "transparent"
-
-
-  property list<ContentItem> importItems
-
   
+
   ScreenSaver {
     id: screenSaver
-    screenSaverEnabled: !(Qt.application.active)
+    screenSaverEnabled: !(Qt.application.active) 
   }
+    
+  ScreenSaverView {
+          id: screenSaverView
+          visible: (! Qt.application.active) && config.enableScreensaver
+  } 
   
   PageStack {
     id: mainPageStack
+    visible: Qt.application.active || (! config.enableScreensaver)
     anchors.fill: parent
     Component.onCompleted: mainPageStack.push(pageMain)
 
@@ -58,26 +81,22 @@ MainView {
     Page {
       id: pageMain
       anchors.fill: parent
-      
-      
-      ScreenSaverView {
-          id: screenSaverView
-      }
+      visible: Qt.application.active || (! config.enableScreensaver)
       
       //Webview-----------------------------------------------------------------------------------------------------
       WebEngineView {
         id: webview
-        audioMuted: !Qt.application.active
-        visible: Qt.application.active
+        audioMuted: config.disableBackgroundAudio && (!Qt.application.active)   
+        visible: Qt.application.active || (! config.enableScreensaver)
         property int keyboardSize: UbuntuApplication.inputMethod.visible ? 10+UbuntuApplication.inputMethod.keyboardRectangle.height/(units.gridUnit / 8) : 0
         anchors{ fill: parent }
         focus: true
         property var currentWebview: webview
         settings.pluginsEnabled: true
-        zoomFactor: mainView.width<mainView.height ? Math.round(100 * mainView.width / 410 ) / 100 : Math.round(100 * mainView.width / 900 ) / 100
+        zoomFactor: mainView.width<mainView.height ? Math.round(100 * mainView.width / config.webviewWidthPortait ) / 100 : Math.round(100 * mainView.width / config.webviewWidthLandscape ) / 100
         
         onKeyboardSizeChanged: {
-        // Échapper correctement les quotes si nécessaire
+        //Don't hide the text edit with keyboard
         var realKeyboardSize=keyboardSize/zoomFactor
         const jsCode = `document.querySelector('footer').style.paddingBottom = "${realKeyboardSize}px"`;
         webview.runJavaScript(jsCode);
@@ -92,11 +111,13 @@ MainView {
           //  Notification based on web desktop notifications (Higher priority)
           //----------------------------------------------------------------------   
           onPresentNotification: (notification) => {
+            if ( config.enableDesktopNotifications )
                 notifier.notifyMain(notification.title, notification.message);
           }
           
           onDownloadRequested: {
               //Not working for now in Qt5
+              //Using Download Helper instead
           }
         
         }//End WebEngineProfile
@@ -110,6 +131,16 @@ MainView {
        url: "https://web.whatsapp.com"
         userScripts: [
           WebEngineScript {
+                name: "AppConfig"
+                injectionPoint: WebEngineScript.DocumentCreation
+                worldId: WebEngineScript.MainWorld
+                sourceCode: "window.appConfig = " + JSON.stringify({
+                    textFontSize: config.textFontSize,
+                    spanFontSize: config.spanFontSize,
+                    enableQuickCopy: config.enableQuickCopy
+                }) + ";"
+            },
+          WebEngineScript {
             injectionPoint: WebEngineScript.DocumentCreation
             worldId: WebEngineScript.MainWorld
             name: "QWebChannel"
@@ -119,9 +150,13 @@ MainView {
         onFileDialogRequested: function(request) {
            request.accepted = true;
           var importPage = mainPageStack.push(Qt.resolvedUrl("ImportPage.qml"),{"contentType": ContentType.All, "handler": ContentHandler.Source})
-          importPage.imported.connect(function(fileUrl) {
-            console.log(String(fileUrl).replace("file://", ""))
-            request.dialogAccept(String(fileUrl).replace("file://", ""));
+          importPage.imported.connect(function(fileUrls) {
+            var files = []
+            var urls = fileUrls.split("\n")
+            for (var i = 0; i < urls.length; i++) {
+            files.push(urls[i].trim().replace("file://", ""));
+            }
+            request.dialogAccept(files);
             mainPageStack.pop(importPage)
           })
           importPage.cancel.connect(function() {
@@ -151,10 +186,12 @@ MainView {
             }
             if ( unread>lastUnreadCount && unread>0  )
             {
-              notifier.triggerDelayedNotification2(unread+" whatsapp message unread");
+               if ( config.enableTitleChangeNotifications )
+                  notifier.triggerDelayedNotification2(unread+" whatsapp message unread");
             }
             lastUnreadCount=unread
-            if (unread > 0)
+            
+            if ( unread > 0 && config.enableNotificationCounter )
               notifier.updateCount(unread)
             else
               notifier.updateCount(0)
@@ -167,16 +204,18 @@ MainView {
           //  Notification based on audio sound file played (Low priority)
           //---------------------------------------------------------------------------
             if (message.startsWith("[DbgAud] https://static.whatsapp.net/")) {
-                //Send notification in 50ms through timer1
-                notifier.triggerDelayedNotification1("New Whatsapp audio notification");
+                //Send notification
+                if ( config.enableSoundNotifications )
+                  notifier.triggerDelayedNotification1("New Whatsapp audio notification");
             }
             if (message.startsWith("[ClipBoardCopy]")) {
-                //Send notification in 50ms through timer1
+              if (config.enableQuickCopy)
+              {
                 textEdit.text = message.replace(/^\[ClipBoardCopy\]\s*/, "")
-                //textEdit.text = message
                 textEdit.selectAll()
                 textEdit.copy()
                 toast.show("Message copied!")
+              }
             }
             if (message.startsWith("[ShowDebug]")) {
                 toast.show(message.replace(/^\[ShowDebug\]\s*/, ""))
@@ -187,9 +226,12 @@ MainView {
                 let output = downloadHelper.getLastDownloaded()
                 var exportPage = mainPageStack.push(Qt.resolvedUrl("ExportPage.qml"),{"url": Qt.resolvedUrl("file://"+output),"contentType": ContentType.All})
             } 
-            
+            if (message.startsWith("[HideAppControls]")) 
+            {
+              notificationsHowto.visible= false;
+              settingsButton.visible= false;
+            }
             if (message.startsWith("[ThemeBackgroundColorDebug]")) {
-              
               
               if ( message.replace(/^\[ThemeBackgroundColorDebug\]\s*/, "") == "#FFFFFF" )
               {
@@ -197,7 +239,6 @@ MainView {
               }
               else
                screenSaverView.backgroundSource="Backgrounds/screensaver-black.png" ;
-              notificationsHowto.visible= false;
             }
         }
         
@@ -220,7 +261,12 @@ MainView {
       id: notificationsHowto
       pageStack: mainPageStack
     }
-
+    
+    
+    SettingsButton{
+      id: settingsButton
+      pageStack: mainPageStack
+    }
       
     }
     
